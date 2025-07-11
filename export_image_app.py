@@ -1,4 +1,4 @@
-# export_image_app.py (Experimental Build - Tabbed UI)
+# export_image_app.py (Contact Sheet Builder v2.0 – Speed & Control Edition)
 
 import streamlit as st
 import pandas as pd
@@ -7,14 +7,15 @@ import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="🖼️ ContactSheet Builder (Fast Mode)", layout="wide")
-st.title("🖼️ ContactSheet Builder – Experimental Speed Build")
+st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0)", layout="wide")
+st.title("🖼️ ContactSheet Builder – Speed & Control Edition")
 
 # Tabs
 stage = st.tabs(["📸 Selection", "📥 Selects", "🎯 Export"])
 
 # Load from all 3 sources (to share between tabs)
 with stage[0]:
+    mode = st.radio("Mode:", ["Lite", "Pro"], horizontal=True)
     source = st.radio("Select Image Source:", ["CSV Upload", "Paste Image URLs", "Upload Local Files"], horizontal=True)
     image_df = pd.DataFrame(columns=["Media Number", "URL"])
 
@@ -24,19 +25,23 @@ with stage[0]:
             df = pd.read_csv(uploaded_file)
             df = df.rename(columns={"Media Link": "URL"})
             df = df[df["URL"].notna()]
-            df = df.sort_values("Your Share", ascending=False)
+            df = df[df["URL"].str.endswith((".jpg", ".jpeg"))]
+            df = df.sort_values(["Your Share", "Sales Count"], ascending=False)
+            df = df[df["URL"].str.contains("http")]
+            df = df.head(54)
             image_df = df[["Media Number", "URL"]].drop_duplicates("Media Number")
 
     elif source == "Paste Image URLs":
         url_input = st.text_area("Paste one image URL per line")
         if url_input.strip():
             urls = url_input.strip().split("\n")
-            image_df = pd.DataFrame({"Media Number": range(len(urls)), "URL": urls})
+            urls = [u for u in urls if u.endswith(('.jpg','.jpeg'))]
+            image_df = pd.DataFrame({"Media Number": range(len(urls)), "URL": urls[:54]})
 
     elif source == "Upload Local Files":
         files = st.file_uploader("Upload JPEG files", type=["jpg", "jpeg"], accept_multiple_files=True)
         if files:
-            image_df = pd.DataFrame({"Media Number": range(len(files)), "URL": files})
+            image_df = pd.DataFrame({"Media Number": range(len(files)), "URL": files[:54]})
 
     if image_df.empty:
         st.stop()
@@ -58,9 +63,8 @@ with stage[0]:
         except:
             return None
 
-    # Scrollable window logic
     st.markdown("---")
-    top = st.columns([6, 2, 1])
+    top = st.columns([5, 4, 3])
     with top[0]:
         st.subheader("🔍 Preview and Reject")
     with top[1]:
@@ -69,8 +73,8 @@ with stage[0]:
         max_offset = max(len(visible_images) - preview_limit, 0)
         page_count = (len(visible_images) + preview_limit - 1) // preview_limit
         current_page = st.session_state.offset // preview_limit + 1
-        pagination = ", ".join(str(i+1) for i in range(page_count))
-        st.markdown(f"Page: < {pagination} >", unsafe_allow_html=True)
+        pages = [str(i+1) for i in range(min(3, page_count))]
+        st.markdown(f"Page: &lt; {' , '.join(pages)} &gt;", unsafe_allow_html=True)
     with top[2]:
         selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
         selected_count = len(selected_df)
@@ -87,13 +91,12 @@ with stage[0]:
             img = fetch_img(row["URL"])
             if img and img.width > img.height:
                 img.thumbnail((300, 300))
-                st.image(img, use_container_width=True)
-                if st.button("❌", key=f"reject_{i}"):
-                    st.session_state.rejected.add(row["Media Number"])
+                with st.container():
+                    if st.button("❌", key=f"reject_{i}"):
+                        st.session_state.rejected.add(row["Media Number"])
+                    st.image(img, use_container_width=True)
             else:
                 st.session_state.rejected.add(row["Media Number"])
-
-    st.info(f"Selected: {selected_count} images")
 
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
@@ -105,7 +108,7 @@ with stage[0]:
                 st.session_state.offset -= preview_limit
     with col2:
         if st.session_state.offset < max_offset:
-            if st.button("Next ➡️"):
+            if st.button("Suggest More Images ➕"):
                 st.session_state.offset += preview_limit
 
 # Selects Tab
@@ -115,8 +118,7 @@ with stage[1]:
         st.warning("No selects confirmed yet.")
         st.stop()
 
-    # Show selected thumbs
-    st.write("These are your confirmed selects:")
+    st.write("Rearrange these to finalize your Contact Sheet:")
     thumbs = st.columns(4)
     for i, (_, row) in enumerate(st.session_state.loaded.iterrows()):
         with thumbs[i % 4]:
