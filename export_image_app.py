@@ -55,21 +55,36 @@ headers = {
 }
 
 cols = st.columns(4)
+loaded = 0
+max_images = 36
 for i, (_, row) in enumerate(unique_df.iterrows()):
+    if loaded >= max_images:
+        break
     img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
     try:
         response = requests.get(img_url, headers=headers, timeout=5)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content)).convert("RGBA")
+            w, h = img.size
+            # Skip vertical or square images
+            if h >= w:
+                continue
             img.thumbnail((300, 300))
-            with cols[i % 4]:
+            with cols[loaded % 4]:
                 if st.checkbox(f"Select {row['Media Number']}", key=i):
                     selected_rows.append(row)
-                st.image(img, use_column_width=True)
+                st.image(img, use_container_width=True)
+            loaded += 1
         else:
             continue
     except:
         continue
+
+if loaded == 0:
+    st.warning("No suitable landscape images found.")
+    st.stop()
+elif loaded < max_images:
+    st.info(f"End of available images. {loaded} loaded.")
 
 # Only continue if we have enough images
 if len(selected_rows) < 1:
