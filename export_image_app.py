@@ -1,4 +1,4 @@
-# export_image_app.py (Contact Sheet Builder v2.0.1 – Speed & UI Enhanced)
+# export_image_app.py (Contact Sheet Builder v2.0.2 – UI+Speed Enhancements)
 
 import streamlit as st
 import pandas as pd
@@ -7,15 +7,18 @@ import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0.1)", layout="wide")
+st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0.2)", layout="wide")
 st.title("🖼️ ContactSheet Builder – Speed & Control Edition")
 
 # Tabs
-stage = st.tabs(["📸 Selection", "📥 Selects", "🎯 Export"])
+mode_col, stage_col = st.columns([1, 12])
+with mode_col:
+    mode = st.radio("", ["Lite", "Pro"], horizontal=True, label_visibility="collapsed")
+
+stage = stage_col.tabs(["📸 Selection", "📥 Selects", "🎯 Export"])
 
 # Load from all 3 sources (to share between tabs)
 with stage[0]:
-    mode = st.radio("Mode:", ["Lite", "Pro"], horizontal=True)
     source = st.radio("Select Image Source:", ["CSV Upload", "Paste Image URLs", "Upload Local Files"], horizontal=True)
     image_df = pd.DataFrame(columns=["Media Number", "URL"])
 
@@ -46,7 +49,6 @@ with stage[0]:
     if image_df.empty:
         st.stop()
 
-    # Session State Init
     if "loaded" not in st.session_state:
         st.session_state.loaded = []
         st.session_state.rejected = set()
@@ -64,7 +66,7 @@ with stage[0]:
             return None
 
     st.markdown("---")
-    top = st.columns([5, 4, 3])
+    top = st.columns([4, 4, 4])
     with top[0]:
         st.subheader("🔍 Preview and Reject")
     with top[1]:
@@ -83,9 +85,8 @@ with stage[0]:
                 st.session_state.loaded = selected_df.copy().head(12)
                 st.session_state.offset = 0
 
-    cols = st.columns(4)
     paginated = visible_images.iloc[st.session_state.offset:st.session_state.offset+preview_limit]
-
+    cols = st.columns(4)
     for i, row in paginated.iterrows():
         with cols[i % 4]:
             img = fetch_img(row["URL"])
@@ -101,12 +102,12 @@ with stage[0]:
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
+    nav = st.columns([1, 2, 1])
+    with nav[0]:
         if st.session_state.offset > 0:
             if st.button("⬅️ Previous"):
                 st.session_state.offset -= preview_limit
-    with col2:
+    with nav[2]:
         if st.session_state.offset < max_offset:
             if st.button("Suggest More Images ➕"):
                 st.session_state.offset += preview_limit
