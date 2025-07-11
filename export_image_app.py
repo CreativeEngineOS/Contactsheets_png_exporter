@@ -1,4 +1,4 @@
-# Contact Sheets Pro v0.1
+# Contact Sheets Lite (2.0.6)
 # Monolithic version with enhancements before modular spin-off
 
 import streamlit as st
@@ -8,10 +8,10 @@ import requests
 from io import BytesIO
 
 # Configuration
-st.set_page_config(page_title="📸 Contact Sheets Pro v0.1", layout="wide")
+st.set_page_config(page_title="📸 Contact Sheets Lite (2.0.6)", layout="wide")
 st.markdown("""
 <style>
-/* Minimal Blender-style UI */
+/* Minimal UI */
 button[kind="primary"] { background-color: #4B8BBE; color: white; border-radius: 4px; }
 [data-testid="stImage"] img { border-radius: 4px; }
 .rejection-button { position: absolute; top: 6px; right: 10px; background: rgba(0,0,0,0.7); color: white; border: none; font-size: 14px; cursor: pointer; z-index: 2; padding: 0.2rem 0.4rem; }
