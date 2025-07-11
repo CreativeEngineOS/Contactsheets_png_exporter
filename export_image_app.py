@@ -1,4 +1,4 @@
-# export_image_app.py (Lean, Image-Only Contact Sheet)
+# export_image_app.py (Lean, Image-Only Contact Sheet - PATCHED)
 
 import streamlit as st
 import pandas as pd
@@ -17,27 +17,38 @@ if not df_file:
 
 # Load and normalize CSV
 df = pd.read_csv(df_file)
-df = df.rename(columns={
+
+# Drop placeholder or empty rows
+if "Media Number" in df.columns:
+    df = df[df["Media Number"].notna()]
+
+# Rename relevant columns
+column_map = {
     "Media Link":     "URL",
     "Your Share":     "Total Earnings",
     "Your Share (%)": "Sales Count",
-})
+}
+df = df.rename(columns=column_map)
+
+# Ensure required columns exist
 for col in ["Media Number", "Description", "URL", "Sales Count", "Total Earnings"]:
     if col not in df.columns:
-        df[col] = "" if col == "Description" or col == "URL" else 0
+        df[col] = "" if col in ["Description", "URL"] else 0
 
 # Compute rating (lean logic)
 def get_star_rating(count, earnings):
     base = min(int(count), 4)
-    if float(earnings) > 200: base += 1
+    if float(earnings) > 200:
+        base += 1
     return base
 
 df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Total Earnings"]), axis=1)
 
+# Deduplicate and select top-rated
 df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
 top_images = df.head(5)
 
-# Layout: 5 images in 1080x720 (landscape)
+# Canvas layout: 1080x720px
 canvas_w, canvas_h = 1080, 720
 thumb_w = canvas_w // 5
 thumb_h = canvas_h
@@ -46,7 +57,8 @@ canvas = Image.new("RGB", (canvas_w, canvas_h), color="white")
 
 for i, (_, row) in enumerate(top_images.iterrows()):
     try:
-        response = requests.get(row.URL + "/picture/photo", timeout=5)
+        img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
+        response = requests.get(img_url, timeout=5)
         img = Image.open(BytesIO(response.content)).convert("RGB")
         img = img.resize((thumb_w, thumb_h))
     except:
