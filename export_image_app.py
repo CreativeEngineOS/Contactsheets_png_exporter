@@ -54,7 +54,7 @@ for i, (_, row) in enumerate(top_images.iterrows()):
     canvas.paste(img, (i * thumb_w, 0))
 
 # Preview and download
-st.image(canvas, caption="Lean Contact Sheet (Top 5 Images)", use_column_width=True)
+st.image(canvas, caption="Lean Contact Sheet (Top 5 Images)", use_container_width=True)
 buf = BytesIO()
 canvas.save(buf, format="PNG")
 st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="lean_contact_sheet.png", mime="image/png")
