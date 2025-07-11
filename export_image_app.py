@@ -1,158 +1,133 @@
-# export_image_app.py (Interactive Contact Sheet - Reject Only)
+# export_image_app.py (Experimental Build - Tabbed UI)
 
 import streamlit as st
 import pandas as pd
-from PIL import Image, ImageDraw
+from PIL import Image
 import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="\U0001f5bc️ ContactSheet PNG Export (Interactive)", layout="wide")
-st.title("🖼️ Contact Sheet Selects")
+st.set_page_config(page_title="🖼️ ContactSheet Builder (Fast Mode)", layout="wide")
+st.title("🖼️ ContactSheet Builder – Experimental Speed Build")
 
-# Upload CSV
-df_file = st.file_uploader("Upload your processed CSV", type=["csv"])
-if not df_file:
-    st.stop()
+# Tabs
+stage = st.tabs(["📸 Selection", "📥 Selects", "🎯 Export"])
 
-# Load and normalize CSV
-df = pd.read_csv(df_file)
-if "Media Number" in df.columns:
-    df = df[df["Media Number"].notna()]
+# Load from all 3 sources (to share between tabs)
+with stage[0]:
+    source = st.radio("Select Image Source:", ["CSV Upload", "Paste Image URLs", "Upload Local Files"], horizontal=True)
+    image_df = pd.DataFrame(columns=["Media Number", "URL"])
 
-df = df.rename(columns={
-    "Media Link": "URL",
-    "Your Share": "Total Earnings",
-    "Your Share (%)": "Sales Count",
-})
+    if source == "CSV Upload":
+        uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+        if uploaded_file:
+            df = pd.read_csv(uploaded_file)
+            df = df.rename(columns={"Media Link": "URL"})
+            df = df[df["URL"].notna()]
+            df = df.sort_values("Your Share", ascending=False)
+            image_df = df[["Media Number", "URL"]].drop_duplicates("Media Number")
 
-# Ensure required columns
-for col in ["Media Number", "Description", "URL", "Sales Count", "Total Earnings"]:
-    if col not in df.columns:
-        df[col] = "" if col in ["Description", "URL"] else 0
+    elif source == "Paste Image URLs":
+        url_input = st.text_area("Paste one image URL per line")
+        if url_input.strip():
+            urls = url_input.strip().split("\n")
+            image_df = pd.DataFrame({"Media Number": range(len(urls)), "URL": urls})
 
-# Rating logic
-def get_star_rating(count, earnings):
-    base = min(int(count), 4)
-    if float(earnings) > 200:
-        base += 1
-    return base
+    elif source == "Upload Local Files":
+        files = st.file_uploader("Upload JPEG files", type=["jpg", "jpeg"], accept_multiple_files=True)
+        if files:
+            image_df = pd.DataFrame({"Media Number": range(len(files)), "URL": files})
 
-df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Total Earnings"]), axis=1)
-unique_df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
+    if image_df.empty:
+        st.stop()
 
-# Preload logic
-PRELOAD_LIMIT = 18
-LOAD_MORE_COUNT = 12
+    # Session State Init
+    if "loaded" not in st.session_state:
+        st.session_state.loaded = []
+        st.session_state.rejected = set()
 
-if "loaded_index" not in st.session_state:
-    st.session_state.loaded_index = 0
-if "loaded_images" not in st.session_state:
-    st.session_state.loaded_images = []
-if "image_state" not in st.session_state:
-    st.session_state.image_state = {}
+    def fetch_img(source):
+        try:
+            if isinstance(source, str):
+                r = requests.get(source, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+                if r.status_code == 200:
+                    return Image.open(BytesIO(r.content)).convert("RGB")
+            else:
+                return Image.open(source).convert("RGB")
+        except:
+            return None
 
-headers = {"User-Agent": "Mozilla/5.0"}
-
-def fetch_image(url):
-    try:
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            img = Image.open(BytesIO(r.content)).convert("RGBA")
-            return img
-    except:
-        return None
-
-def load_next_batch(count):
-    new_images = []
-    seen_ids = {mid for mid, _, _ in st.session_state.loaded_images}
-    rejected_ids = {k for k, v in st.session_state.image_state.items() if v == "rejected"}
-
-    while len(new_images) < count and st.session_state.loaded_index < len(unique_df):
-        row = unique_df.iloc[st.session_state.loaded_index]
-        st.session_state.loaded_index += 1
-        media_id = str(row["Media Number"])
-
-        if media_id in seen_ids or media_id in rejected_ids:
-            continue
-
-        img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
-        img = fetch_image(img_url)
-        if img:
-            w, h = img.size
-            if h >= w:
-                continue
-            img.thumbnail((300, 300))
-            new_images.append((media_id, row, img))
-
-    st.session_state.loaded_images.extend(new_images)
-    for media_id, _, _ in new_images:
-        st.session_state.image_state[media_id] = "active"
-
-# Initial load
-if st.session_state.loaded_index == 0:
-    load_next_batch(PRELOAD_LIMIT)
-
-# Display grid
-st.subheader("🧩 Select your top images")
-cols = st.columns(4)
-visible_images = 0
-for idx, (media_id, row, img) in enumerate(st.session_state.loaded_images):
-    if st.session_state.image_state.get(media_id) == "rejected":
-        continue
-    with cols[visible_images % 4]:
-        container = st.container()
-        with container:
-            col_img, col_btn = st.columns([4, 1])
-            with col_img:
-                st.image(img, use_container_width=True)
-            with col_btn:
-                if st.button("❌", key=f"reject_{media_id}"):
-                    st.session_state.image_state[media_id] = "rejected"
-    visible_images += 1
-
-remaining = [row for media_id, row, _ in st.session_state.loaded_images if st.session_state.image_state.get(media_id) != "rejected"]
-
-# Suggest More Images
-if len(remaining) < 12 and st.session_state.loaded_index < len(unique_df):
+    # Grid preview
     st.markdown("---")
-    st.markdown("⬇️ You can suggest more images if you're not at 12 yet:")
-    if st.button("➕ Suggest More Images"):
-        load_next_batch(LOAD_MORE_COUNT)
+    st.subheader("🔍 Preview and Reject")
+    cols = st.columns(4)
+    preview_limit = 18
 
-# Over-selected warning
-if len(remaining) > 12:
-    st.warning(f"You've selected {len(remaining)} images. Please reject {len(remaining) - 12} more to continue.")
+    for i, row in image_df.iterrows():
+        if i >= preview_limit:
+            break
+        if row["Media Number"] in st.session_state.rejected:
+            continue
+        with cols[i % 4]:
+            img = fetch_img(row["URL"])
+            if img:
+                img.thumbnail((300, 300))
+                st.image(img, use_container_width=True)
+            if st.button("❌", key=f"reject_{i}"):
+                st.session_state.rejected.add(row["Media Number"])
 
-# Confirm Selection
-if st.button("✅ Confirm Selects"):
-    st.session_state.loaded_images = [item for item in st.session_state.loaded_images if st.session_state.image_state[item[0]] != "rejected"]
-    st.session_state.image_state = {media_id: "active" for media_id, _, _ in st.session_state.loaded_images}
+    selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
+    selected_count = len(selected_df)
+    st.info(f"Selected: {selected_count} images")
 
-# Final Contact Sheet (Preview + Download)
-if 0 < len(remaining) <= 12:
-    st.subheader("🖼️ Selects")
-    top_images = pd.DataFrame(remaining).head(12)
-    canvas_width, canvas_height = 1280, 960
+    if selected_count > 12:
+        st.warning(f"Too many selected! Reject {selected_count - 12} more.")
+
+    if st.button("✅ Confirm Selects") and selected_count <= 12:
+        st.session_state.loaded = selected_df.copy().head(12)
+
+# Selects Tab
+with stage[1]:
+    st.subheader("📥 Selects")
+    if not st.session_state.loaded:
+        st.warning("No selects confirmed yet.")
+        st.stop()
+
+    # Show selected thumbs
+    st.write("These are your confirmed selects:")
+    thumbs = st.columns(4)
+    for i, (_, row) in enumerate(st.session_state.loaded.iterrows()):
+        with thumbs[i % 4]:
+            img = fetch_img(row.URL)
+            if img:
+                img.thumbnail((200, 200))
+                st.image(img, use_container_width=True)
+
+# Export Tab
+with stage[2]:
+    st.subheader("🎯 Export")
+    if not st.session_state.loaded:
+        st.warning("Nothing to export.")
+        st.stop()
+
+    from PIL import ImageDraw
+    canvas = Image.new("RGBA", (1280, 960), (255, 255, 255, 0))
     cols, rows = 4, 3
     padding = 10
-    thumb_w = (canvas_width - (cols + 1) * padding) // cols
-    thumb_h = (canvas_height - (rows + 1) * padding) // rows
-    canvas = Image.new("RGBA", (canvas_width, canvas_height), color=(255, 255, 255, 0))
+    thumb_w = (1280 - (cols + 1) * padding) // cols
+    thumb_h = (960 - (rows + 1) * padding) // rows
 
-    for i, (_, row) in enumerate(top_images.iterrows()):
-        img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
-        img = fetch_image(img_url)
+    for i, (_, row) in enumerate(st.session_state.loaded.iterrows()):
+        img = fetch_img(row.URL)
         if not img:
-            img = Image.new("RGBA", (thumb_w, thumb_h), color=(204, 204, 204, 255))
+            img = Image.new("RGB", (thumb_w, thumb_h), color=(180, 180, 180))
         else:
-            img.thumbnail((thumb_w, thumb_h), Image.LANCZOS)
-
+            img.thumbnail((thumb_w, thumb_h))
         x = padding + (i % cols) * (thumb_w + padding)
         y = padding + (i // cols) * (thumb_h + padding)
-        canvas.paste(img, (x, y), mask=img if img.mode == "RGBA" else None)
+        canvas.paste(img, (x, y))
 
     st.image(canvas, use_container_width=True)
     buf = BytesIO()
     canvas.save(buf, format="PNG")
-    st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="contact_sheet.png", mime="image/png")
+    st.download_button("⬇️ Download Contact Sheet", buf.getvalue(), file_name="contact_sheet.png", mime="image/png")
