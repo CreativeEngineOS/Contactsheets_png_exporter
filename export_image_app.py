@@ -43,7 +43,7 @@ df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Tot
 unique_df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
 
 # Preload logic
-PRELOAD_LIMIT = 24
+PRELOAD_LIMIT = 18
 LOAD_MORE_COUNT = 12
 
 if "loaded_index" not in st.session_state:
@@ -92,22 +92,22 @@ if st.button("🔄 Reset Grid"):
 # Display grid
 st.subheader("Reject images to curate your contact sheet")
 cols = st.columns(4)
+visible_images = 0
 for idx, (media_id, row, img) in enumerate(st.session_state.loaded_images):
-    with cols[idx % 4]:
-        if st.session_state.image_state.get(media_id) == "rejected":
-            placeholder = Image.new("RGBA", img.size, (0, 0, 0, 255))
-            st.image(placeholder, use_container_width=True)
-        else:
-            st.image(img, use_container_width=True)
+    if st.session_state.image_state.get(media_id) == "rejected":
+        continue
+    with cols[visible_images % 4]:
+        st.image(img, use_container_width=True)
         if st.button("❌", key=f"reject_{media_id}"):
             st.session_state.image_state[media_id] = "rejected"
+    visible_images += 1
 
 # Filter active images
 remaining = [row for media_id, row, _ in st.session_state.loaded_images if st.session_state.image_state.get(media_id) != "rejected"]
 
 # Show Load More button if needed
-if len(remaining) > 12 and st.session_state.loaded_index < len(unique_df):
-    if st.button("➕ Load 12 More Images"):
+if len(remaining) < 12 and st.session_state.loaded_index < len(unique_df):
+    if st.button("➕ Add More Images"):
         load_next_batch(LOAD_MORE_COUNT)
 
 # Final export section
