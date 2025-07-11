@@ -1,4 +1,4 @@
-# export_image_app.py (Contact Sheet Builder v2.0 – Speed & Control Edition)
+# export_image_app.py (Contact Sheet Builder v2.0.1 – Speed & UI Enhanced)
 
 import streamlit as st
 import pandas as pd
@@ -7,7 +7,7 @@ import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0)", layout="wide")
+st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0.1)", layout="wide")
 st.title("🖼️ ContactSheet Builder – Speed & Control Edition")
 
 # Tabs
@@ -74,7 +74,7 @@ with stage[0]:
         page_count = (len(visible_images) + preview_limit - 1) // preview_limit
         current_page = st.session_state.offset // preview_limit + 1
         pages = [str(i+1) for i in range(min(3, page_count))]
-        st.markdown(f"Page: &lt; {' , '.join(pages)} &gt;", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'>Page: &lt; {' , '.join(pages)} &gt;</div>", unsafe_allow_html=True)
     with top[2]:
         selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
         selected_count = len(selected_df)
@@ -91,17 +91,17 @@ with stage[0]:
             img = fetch_img(row["URL"])
             if img and img.width > img.height:
                 img.thumbnail((300, 300))
-                with st.container():
-                    if st.button("❌", key=f"reject_{i}"):
-                        st.session_state.rejected.add(row["Media Number"])
-                    st.image(img, use_container_width=True)
+                reject_key = f"reject_{i}"
+                if st.button("❌", key=reject_key):
+                    st.session_state.rejected.add(row["Media Number"])
+                st.image(img, use_container_width=True)
             else:
                 st.session_state.rejected.add(row["Media Number"])
 
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([1, 1])
     with col1:
         if st.session_state.offset > 0:
             if st.button("⬅️ Previous"):
