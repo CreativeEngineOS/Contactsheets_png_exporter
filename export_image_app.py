@@ -1,4 +1,4 @@
-# export_image_app.py (Lean, Image-Only Contact Sheet - DIAGNOSTIC MODE)
+# export_image_app.py (Interactive Contact Sheet - Selection Mode)
 
 import streamlit as st
 import pandas as pd
@@ -7,8 +7,8 @@ import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="🖼️ ContactSheet PNG Export (Lean Mode)", layout="wide")
-st.title("🖼️ Export Lean Contact Sheet (Top Images Grid)")
+st.set_page_config(page_title="🖼️ ContactSheet PNG Export (Interactive)", layout="wide")
+st.title("🖼️ Export Interactive Contact Sheet (Top Images Grid)")
 
 # Upload CSV
 df_file = st.file_uploader("Upload your processed CSV", type=["csv"])
@@ -45,10 +45,41 @@ def get_star_rating(count, earnings):
 df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Total Earnings"]), axis=1)
 
 # Deduplicate and select top-rated
-df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
-top_images = df.head(12)
+unique_df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
 
-# Canvas layout: 4 columns x 3 rows = 12 images total
+# Image previews with checkboxes
+st.subheader("Select images to include in your contact sheet")
+selected_rows = []
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36"
+}
+
+cols = st.columns(4)
+for i, (_, row) in enumerate(unique_df.iterrows()):
+    img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
+    try:
+        response = requests.get(img_url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content)).convert("RGBA")
+            img.thumbnail((300, 300))
+            with cols[i % 4]:
+                if st.checkbox(f"Select {row['Media Number']}", key=i):
+                    selected_rows.append(row)
+                st.image(img, use_column_width=True)
+        else:
+            continue
+    except:
+        continue
+
+# Only continue if we have enough images
+if len(selected_rows) < 1:
+    st.warning("Select at least one image to generate the contact sheet.")
+    st.stop()
+
+# Rebuild DataFrame and limit to 12 images
+top_images = pd.DataFrame(selected_rows).head(12)
+
+# Canvas layout: 4 columns x 3 rows = 12 images max
 canvas_width = 1280
 canvas_height = 960
 cols, rows = 4, 3
@@ -57,34 +88,25 @@ thumb_w = (canvas_width - (cols + 1) * thumb_padding) // cols
 thumb_h = (canvas_height - (rows + 1) * thumb_padding) // rows
 canvas = Image.new("RGBA", (canvas_width, canvas_height), color=(255, 255, 255, 0))  # Transparent background
 
-# Spoof headers to bypass 403 errors
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36"
-}
-
+# Paste selected images
 for i, (_, row) in enumerate(top_images.iterrows()):
-    if i >= cols * rows:
-        break
     img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
-    st.write(f"Fetching image: {img_url}")
     try:
         response = requests.get(img_url, headers=headers, timeout=5)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content)).convert("RGBA")
             img.thumbnail((thumb_w, thumb_h), Image.LANCZOS)
         else:
-            st.warning(f"⚠️ Failed to fetch: {img_url} — status {response.status_code}")
             img = Image.new("RGBA", (thumb_w, thumb_h), color=(204, 204, 204, 255))
-    except Exception as e:
-        st.error(f"❌ Error loading image: {img_url}\n{e}")
+    except:
         img = Image.new("RGBA", (thumb_w, thumb_h), color=(204, 204, 204, 255))
 
     x = thumb_padding + (i % cols) * (thumb_w + thumb_padding)
     y = thumb_padding + (i // cols) * (thumb_h + thumb_padding)
     canvas.paste(img, (x, y), mask=img if img.mode == "RGBA" else None)
 
-# Preview and download
-st.image(canvas, caption="Lean Contact Sheet (Top 12 Images)", use_container_width=True)
+# Display and download
+st.image(canvas, caption="🖼️ Final Contact Sheet Preview", use_container_width=True)
 buf = BytesIO()
 canvas.save(buf, format="PNG")
-st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="lean_contact_sheet.png", mime="image/png")
+st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="custom_contact_sheet.png", mime="image/png")
