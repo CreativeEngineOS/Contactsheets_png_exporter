@@ -93,11 +93,14 @@ if st.button("🔄 Reset Grid"):
 st.subheader("Reject images to curate your contact sheet")
 cols = st.columns(4)
 for idx, (media_id, row, img) in enumerate(st.session_state.loaded_images):
-    if st.session_state.image_state.get(media_id) != "rejected":
-        with cols[idx % 4]:
+    with cols[idx % 4]:
+        if st.session_state.image_state.get(media_id) == "rejected":
+            placeholder = Image.new("RGBA", img.size, (0, 0, 0, 255))
+            st.image(placeholder, use_container_width=True)
+        else:
             st.image(img, use_container_width=True)
-            if st.button("❌", key=f"reject_{media_id}"):
-                st.session_state.image_state[media_id] = "rejected"
+        if st.button("❌", key=f"reject_{media_id}"):
+            st.session_state.image_state[media_id] = "rejected"
 
 # Filter active images
 remaining = [row for media_id, row, _ in st.session_state.loaded_images if st.session_state.image_state.get(media_id) != "rejected"]
