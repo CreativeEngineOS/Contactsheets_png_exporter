@@ -58,14 +58,28 @@ with stage[0]:
         except:
             return None
 
-    # Grid preview
-    st.markdown("---")
-    st.subheader("🔍 Preview and Reject")
-    cols = st.columns(4)
-    preview_limit = 18
-
     # Scrollable window logic
-    visible_images = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
+    st.markdown("---")
+    top = st.columns([6, 2, 1])
+    with top[0]:
+        st.subheader("🔍 Preview and Reject")
+    with top[1]:
+        visible_images = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
+        preview_limit = 18
+        max_offset = max(len(visible_images) - preview_limit, 0)
+        page_count = (len(visible_images) + preview_limit - 1) // preview_limit
+        current_page = st.session_state.offset // preview_limit + 1
+        pagination = ", ".join(str(i+1) for i in range(page_count))
+        st.markdown(f"Page: < {pagination} >", unsafe_allow_html=True)
+    with top[2]:
+        selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
+        selected_count = len(selected_df)
+        if selected_count <= 12:
+            if st.button("✅ Confirm Selects"):
+                st.session_state.loaded = selected_df.copy().head(12)
+                st.session_state.offset = 0
+
+    cols = st.columns(4)
     paginated = visible_images.iloc[st.session_state.offset:st.session_state.offset+preview_limit]
 
     for i, row in paginated.iterrows():
@@ -79,15 +93,11 @@ with stage[0]:
             else:
                 st.session_state.rejected.add(row["Media Number"])
 
-    selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
-    selected_count = len(selected_df)
     st.info(f"Selected: {selected_count} images")
 
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
 
-    # Pagination controls
-    max_offset = max(len(visible_images) - preview_limit, 0)
     col1, col2 = st.columns(2)
     with col1:
         if st.session_state.offset > 0:
@@ -97,10 +107,6 @@ with stage[0]:
         if st.session_state.offset < max_offset:
             if st.button("Next ➡️"):
                 st.session_state.offset += preview_limit
-
-    if st.button("✅ Confirm Selects") and selected_count <= 12:
-        st.session_state.loaded = selected_df.copy().head(12)
-        st.session_state.offset = 0
 
 # Selects Tab
 with stage[1]:
