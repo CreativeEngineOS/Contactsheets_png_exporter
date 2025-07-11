@@ -8,7 +8,7 @@ from io import BytesIO
 
 # Config
 st.set_page_config(page_title="🖼️ ContactSheet PNG Export (Lean Mode)", layout="wide")
-st.title("🖼️ Export Lean Contact Sheet (Top 5 Images)")
+st.title("🖼️ Export Lean Contact Sheet (Top Images Grid)")
 
 # Upload CSV
 df_file = st.file_uploader("Upload your processed CSV", type=["csv"])
@@ -46,14 +46,14 @@ df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Tot
 
 # Deduplicate and select top-rated
 df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
-top_images = df.head(5)
+top_images = df.head(10)
 
-# Canvas layout: 1080x720px
-canvas_w, canvas_h = 1080, 720
-thumb_w = canvas_w // 5
-thumb_h = canvas_h
-
-canvas = Image.new("RGB", (canvas_w, canvas_h), color="white")
+# Canvas layout: 1080x720px, 2 rows x 5 columns
+cols, rows = 5, 2
+thumb_padding = 10
+thumb_w = (1080 - (cols + 1) * thumb_padding) // cols
+thumb_h = (720 - (rows + 1) * thumb_padding) // rows
+canvas = Image.new("RGBA", (1080, 720), color=(255, 255, 255, 0))  # Transparent background
 
 # Spoof headers to bypass 403 errors
 headers = {
@@ -61,24 +61,28 @@ headers = {
 }
 
 for i, (_, row) in enumerate(top_images.iterrows()):
+    if i >= cols * rows:
+        break
     img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
     st.write(f"Fetching image: {img_url}")
     try:
         response = requests.get(img_url, headers=headers, timeout=5)
         if response.status_code == 200:
-            img = Image.open(BytesIO(response.content)).convert("RGB")
-            img = img.resize((thumb_w, thumb_h))
+            img = Image.open(BytesIO(response.content)).convert("RGBA")
+            img.thumbnail((thumb_w, thumb_h), Image.LANCZOS)
         else:
             st.warning(f"⚠️ Failed to fetch: {img_url} — status {response.status_code}")
-            img = Image.new("RGB", (thumb_w, thumb_h), color="#ccc")
+            img = Image.new("RGBA", (thumb_w, thumb_h), color=(204, 204, 204, 255))
     except Exception as e:
         st.error(f"❌ Error loading image: {img_url}\n{e}")
-        img = Image.new("RGB", (thumb_w, thumb_h), color="#ccc")
+        img = Image.new("RGBA", (thumb_w, thumb_h), color=(204, 204, 204, 255))
 
-    canvas.paste(img, (i * thumb_w, 0))
+    x = thumb_padding + (i % cols) * (thumb_w + thumb_padding)
+    y = thumb_padding + (i // cols) * (thumb_h + thumb_padding)
+    canvas.paste(img, (x, y), mask=img if img.mode == "RGBA" else None)
 
 # Preview and download
-st.image(canvas, caption="Lean Contact Sheet (Top 5 Images)", use_container_width=True)
+st.image(canvas, caption="Lean Contact Sheet (Top 10 Images)", use_container_width=True)
 buf = BytesIO()
 canvas.save(buf, format="PNG")
 st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="lean_contact_sheet.png", mime="image/png")
