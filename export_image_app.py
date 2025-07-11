@@ -1,4 +1,4 @@
-# export_image_app.py (Lean, Image-Only Contact Sheet - PATCHED)
+# export_image_app.py (Lean, Image-Only Contact Sheet - DIAGNOSTIC MODE)
 
 import streamlit as st
 import pandas as pd
@@ -56,13 +56,20 @@ thumb_h = canvas_h
 canvas = Image.new("RGB", (canvas_w, canvas_h), color="white")
 
 for i, (_, row) in enumerate(top_images.iterrows()):
+    img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
+    st.write(f"Fetching image: {img_url}")
     try:
-        img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
         response = requests.get(img_url, timeout=5)
-        img = Image.open(BytesIO(response.content)).convert("RGB")
-        img = img.resize((thumb_w, thumb_h))
-    except:
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+            img = img.resize((thumb_w, thumb_h))
+        else:
+            st.warning(f"⚠️ Failed to fetch: {img_url} — status {response.status_code}")
+            img = Image.new("RGB", (thumb_w, thumb_h), color="#ccc")
+    except Exception as e:
+        st.error(f"❌ Error loading image: {img_url}\n{e}")
         img = Image.new("RGB", (thumb_w, thumb_h), color="#ccc")
+
     canvas.paste(img, (i * thumb_w, 0))
 
 # Preview and download
