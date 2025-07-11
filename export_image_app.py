@@ -45,6 +45,7 @@ with stage[0]:
     if "loaded" not in st.session_state:
         st.session_state.loaded = []
         st.session_state.rejected = set()
+        st.session_state.offset = 0
 
     def fetch_img(source):
         try:
@@ -63,17 +64,19 @@ with stage[0]:
     cols = st.columns(4)
     preview_limit = 18
 
-    for i, row in image_df.iterrows():
-        if i >= preview_limit:
-            break
-        if row["Media Number"] in st.session_state.rejected:
-            continue
+    # Scrollable window logic
+    visible_images = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
+    paginated = visible_images.iloc[st.session_state.offset:st.session_state.offset+preview_limit]
+
+    for i, row in paginated.iterrows():
         with cols[i % 4]:
             img = fetch_img(row["URL"])
-            if img:
+            if img and img.width > img.height:
                 img.thumbnail((300, 300))
                 st.image(img, use_container_width=True)
-            if st.button("❌", key=f"reject_{i}"):
+                if st.button("❌", key=f"reject_{i}"):
+                    st.session_state.rejected.add(row["Media Number"])
+            else:
                 st.session_state.rejected.add(row["Media Number"])
 
     selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
@@ -83,8 +86,21 @@ with stage[0]:
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
 
+    # Pagination controls
+    max_offset = max(len(visible_images) - preview_limit, 0)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.session_state.offset > 0:
+            if st.button("⬅️ Previous"):
+                st.session_state.offset -= preview_limit
+    with col2:
+        if st.session_state.offset < max_offset:
+            if st.button("Next ➡️"):
+                st.session_state.offset += preview_limit
+
     if st.button("✅ Confirm Selects") and selected_count <= 12:
         st.session_state.loaded = selected_df.copy().head(12)
+        st.session_state.offset = 0
 
 # Selects Tab
 with stage[1]:
