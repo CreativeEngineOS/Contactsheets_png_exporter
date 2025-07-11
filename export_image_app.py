@@ -1,4 +1,4 @@
-# export_image_app.py (Contact Sheet Builder v2.0.2 – UI+Speed Enhancements)
+# export_image_app.py (Contact Sheet Builder v2.0.4 – Blender-style UI Polish)
 
 import streamlit as st
 import pandas as pd
@@ -7,7 +7,18 @@ import requests
 from io import BytesIO
 
 # Config
-st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0.2)", layout="wide")
+st.set_page_config(page_title="🖼️ ContactSheet Builder (v2.0.4)", layout="wide")
+st.markdown("""
+<style>
+/* Blender-style minimalistic UI tweaks */
+button[kind="primary"] { background-color: #4B8BBE; color: white; border-radius: 4px; }
+button[kind="secondary"] { background-color: transparent; border: 1px solid #ccc; }
+[data-testid="stImage"] img { border-radius: 4px; }
+.rejection-button { position: absolute; top: 6px; right: 10px; background: rgba(0,0,0,0.6); color: white; border: none; font-size: 14px; cursor: pointer; z-index: 2; }
+.image-container { position: relative; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🖼️ ContactSheet Builder – Speed & Control Edition")
 
 # Tabs
@@ -27,18 +38,15 @@ with stage[0]:
         if uploaded_file:
             df = pd.read_csv(uploaded_file)
             df = df.rename(columns={"Media Link": "URL"})
-            df = df[df["URL"].notna()]
-            df = df[df["URL"].str.endswith((".jpg", ".jpeg"))]
-            df = df.sort_values(["Your Share", "Sales Count"], ascending=False)
+            df = df[df["URL"].notna() & df["URL"].str.endswith((".jpg", ".jpeg"))]
             df = df[df["URL"].str.contains("http")]
-            df = df.head(54)
-            image_df = df[["Media Number", "URL"]].drop_duplicates("Media Number")
+            df = df.sort_values(["Your Share", "Sales Count"], ascending=False).drop_duplicates("Media Number")
+            image_df = df[["Media Number", "URL"]].head(54)
 
     elif source == "Paste Image URLs":
         url_input = st.text_area("Paste one image URL per line")
         if url_input.strip():
-            urls = url_input.strip().split("\n")
-            urls = [u for u in urls if u.endswith(('.jpg','.jpeg'))]
+            urls = [u for u in url_input.strip().split("\n") if u.endswith((".jpg", ".jpeg"))]
             image_df = pd.DataFrame({"Media Number": range(len(urls)), "URL": urls[:54]})
 
     elif source == "Upload Local Files":
@@ -65,19 +73,23 @@ with stage[0]:
         except:
             return None
 
-    st.markdown("---")
-    top = st.columns([4, 4, 4])
-    with top[0]:
-        st.subheader("🔍 Preview and Reject")
-    with top[1]:
+    # Header Bar
+    bar = st.columns([3, 3, 3, 3])
+    with bar[0]:
+        st.subheader("🔍 Preview & Reject")
+    with bar[1]:
         visible_images = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
         preview_limit = 18
         max_offset = max(len(visible_images) - preview_limit, 0)
-        page_count = (len(visible_images) + preview_limit - 1) // preview_limit
         current_page = st.session_state.offset // preview_limit + 1
-        pages = [str(i+1) for i in range(min(3, page_count))]
-        st.markdown(f"<div style='text-align: center;'>Page: &lt; {' , '.join(pages)} &gt;</div>", unsafe_allow_html=True)
-    with top[2]:
+        page_count = (len(visible_images) + preview_limit - 1) // preview_limit
+        pages = [str(i + 1) for i in range(min(3, page_count))]
+        st.markdown(f"<div style='text-align:center;'>Page: &lt; {' , '.join(pages)} &gt;</div>", unsafe_allow_html=True)
+    with bar[2]:
+        if st.session_state.offset < max_offset:
+            if st.button("Suggest More Images ➕"):
+                st.session_state.offset += preview_limit
+    with bar[3]:
         selected_df = image_df[~image_df["Media Number"].isin(st.session_state.rejected)]
         selected_count = len(selected_df)
         if selected_count <= 12:
@@ -85,7 +97,8 @@ with stage[0]:
                 st.session_state.loaded = selected_df.copy().head(12)
                 st.session_state.offset = 0
 
-    paginated = visible_images.iloc[st.session_state.offset:st.session_state.offset+preview_limit]
+    # Image Grid
+    paginated = visible_images.iloc[st.session_state.offset:st.session_state.offset + preview_limit]
     cols = st.columns(4)
     for i, row in paginated.iterrows():
         with cols[i % 4]:
@@ -101,16 +114,6 @@ with stage[0]:
 
     if selected_count > 12:
         st.warning(f"Too many selected! Reject {selected_count - 12} more.")
-
-    nav = st.columns([1, 2, 1])
-    with nav[0]:
-        if st.session_state.offset > 0:
-            if st.button("⬅️ Previous"):
-                st.session_state.offset -= preview_limit
-    with nav[2]:
-        if st.session_state.offset < max_offset:
-            if st.button("Suggest More Images ➕"):
-                st.session_state.offset += preview_limit
 
 # Selects Tab
 with stage[1]:
@@ -156,4 +159,3 @@ with stage[2]:
     buf = BytesIO()
     canvas.save(buf, format="PNG")
     st.download_button("⬇️ Download Contact Sheet", buf.getvalue(), file_name="contact_sheet.png", mime="image/png")
-
