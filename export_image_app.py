@@ -6,33 +6,27 @@ from PIL import Image, ImageDraw
 import requests
 from io import BytesIO
 
-# Config
 st.set_page_config(page_title="🖼️ ContactSheet PNG Export (Interactive)", layout="wide")
 st.title("🖼️ Export Interactive Contact Sheet (Top Images Grid)")
 
-# Upload CSV
 df_file = st.file_uploader("Upload your processed CSV", type=["csv"])
 if not df_file:
     st.stop()
 
-# Load and normalize CSV
 df = pd.read_csv(df_file)
 if "Media Number" in df.columns:
     df = df[df["Media Number"].notna()]
 
-# Rename columns
 df = df.rename(columns={
     "Media Link": "URL",
     "Your Share": "Total Earnings",
     "Your Share (%)": "Sales Count",
 })
 
-# Ensure required columns
 for col in ["Media Number", "Description", "URL", "Sales Count", "Total Earnings"]:
     if col not in df.columns:
         df[col] = "" if col in ["Description", "URL"] else 0
 
-# Rating logic
 def get_star_rating(count, earnings):
     base = min(int(count), 4)
     if float(earnings) > 200:
@@ -42,7 +36,8 @@ def get_star_rating(count, earnings):
 df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Total Earnings"]), axis=1)
 unique_df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
 
-# Preload logic
+# ————————————————————————
+# State setup
 PRELOAD_LIMIT = 18
 LOAD_MORE_COUNT = 12
 
@@ -53,7 +48,8 @@ if "loaded_images" not in st.session_state:
 if "image_state" not in st.session_state:
     st.session_state.image_state = {}
 
-# Load next batch of images
+# ————————————————————————
+# Load next batch
 def load_next_batch(count):
     headers = {"User-Agent": "Mozilla/5.0"}
     new_images = []
@@ -68,7 +64,7 @@ def load_next_batch(count):
                 img = Image.open(BytesIO(r.content)).convert("RGBA")
                 w, h = img.size
                 if h >= w:
-                    continue  # skip vertical or square
+                    continue  # skip vertical/square
                 img.thumbnail((300, 300))
                 new_images.append((media_id, row, img))
         except:
@@ -81,15 +77,18 @@ def load_next_batch(count):
 if st.session_state.loaded_index == 0:
     load_next_batch(PRELOAD_LIMIT)
 
+# ————————————————————————
 # Reset grid
 def reset_grid():
-    st.session_state.loaded_images = [item for item in st.session_state.loaded_images if st.session_state.image_state[item[0]] != "rejected"]
-    st.session_state.image_state = {media_id: "active" for media_id, _, _ in st.session_state.loaded_images}
+    st.session_state.loaded_images = [
+        item for item in st.session_state.loaded_images
+        if st.session_state.image_state[item[0]] != "rejected"
+    ]
+    st.session_state.image_state = {
+        media_id: "active" for media_id, _, _ in st.session_state.loaded_images
+    }
 
-if st.button("🔄 Reset Grid"):
-    reset_grid()
-
-# Display grid
+# Grid display
 st.subheader("Reject images to curate your contact sheet")
 cols = st.columns(4)
 visible_images = 0
@@ -102,18 +101,26 @@ for idx, (media_id, row, img) in enumerate(st.session_state.loaded_images):
             st.session_state.image_state[media_id] = "rejected"
     visible_images += 1
 
-# Filter active images
-remaining = [row for media_id, row, _ in st.session_state.loaded_images if st.session_state.image_state.get(media_id) != "rejected"]
+# Reset below grid
+st.markdown("---")
+if st.button("🔄 Reset Grid"):
+    reset_grid()
 
-# Show Load More button if needed
+# More images if needed
+remaining = [
+    row for media_id, row, _ in st.session_state.loaded_images
+    if st.session_state.image_state.get(media_id) != "rejected"
+]
 if len(remaining) < 12 and st.session_state.loaded_index < len(unique_df):
     if st.button("➕ Add More Images"):
         load_next_batch(LOAD_MORE_COUNT)
 
-# Final export section
-if len(remaining) <= 12 and len(remaining) > 0:
-    st.subheader("🖼️ Final Contact Sheet Preview")
+# ————————————————————————
+# Final render
+if 0 < len(remaining) <= 12:
+    st.subheader("📄 Final Contact Sheet Preview")
     top_images = pd.DataFrame(remaining).head(12)
+
     canvas_width, canvas_height = 1280, 960
     cols, rows = 4, 3
     padding = 10
@@ -141,4 +148,4 @@ if len(remaining) <= 12 and len(remaining) > 0:
     st.image(canvas, caption="🖼️ Final Contact Sheet", use_container_width=True)
     buf = BytesIO()
     canvas.save(buf, format="PNG")
-    st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="custom_contact_sheet.png", mime="image/png")
+    st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="contact_sheet.png", mime="image/png")
