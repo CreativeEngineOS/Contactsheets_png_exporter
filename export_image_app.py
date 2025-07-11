@@ -46,14 +46,16 @@ df["Rating"] = df.apply(lambda row: get_star_rating(row["Sales Count"], row["Tot
 
 # Deduplicate and select top-rated
 df = df.sort_values("Rating", ascending=False).drop_duplicates("Media Number")
-top_images = df.head(10)
+top_images = df.head(12)
 
-# Canvas layout: 1080x720px, 2 rows x 5 columns
-cols, rows = 5, 2
+# Canvas layout: 4 columns x 3 rows = 12 images total
+canvas_width = 1280
+canvas_height = 960
+cols, rows = 4, 3
 thumb_padding = 10
-thumb_w = (1080 - (cols + 1) * thumb_padding) // cols
-thumb_h = (720 - (rows + 1) * thumb_padding) // rows
-canvas = Image.new("RGBA", (1080, 720), color=(255, 255, 255, 0))  # Transparent background
+thumb_w = (canvas_width - (cols + 1) * thumb_padding) // cols
+thumb_h = (canvas_height - (rows + 1) * thumb_padding) // rows
+canvas = Image.new("RGBA", (canvas_width, canvas_height), color=(255, 255, 255, 0))  # Transparent background
 
 # Spoof headers to bypass 403 errors
 headers = {
@@ -82,7 +84,7 @@ for i, (_, row) in enumerate(top_images.iterrows()):
     canvas.paste(img, (x, y), mask=img if img.mode == "RGBA" else None)
 
 # Preview and download
-st.image(canvas, caption="Lean Contact Sheet (Top 10 Images)", use_container_width=True)
+st.image(canvas, caption="Lean Contact Sheet (Top 12 Images)", use_container_width=True)
 buf = BytesIO()
 canvas.save(buf, format="PNG")
 st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="lean_contact_sheet.png", mime="image/png")
