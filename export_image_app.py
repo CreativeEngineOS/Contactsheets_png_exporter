@@ -55,11 +55,16 @@ thumb_h = canvas_h
 
 canvas = Image.new("RGB", (canvas_w, canvas_h), color="white")
 
+# Spoof headers to bypass 403 errors
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36"
+}
+
 for i, (_, row) in enumerate(top_images.iterrows()):
     img_url = str(row.URL).strip().rstrip("/") + "/picture/photo"
     st.write(f"Fetching image: {img_url}")
     try:
-        response = requests.get(img_url, timeout=5)
+        response = requests.get(img_url, headers=headers, timeout=5)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content)).convert("RGB")
             img = img.resize((thumb_w, thumb_h))
