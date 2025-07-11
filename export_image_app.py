@@ -8,7 +8,7 @@ from io import BytesIO
 
 # Config
 st.set_page_config(page_title="\U0001f5bc️ ContactSheet PNG Export (Interactive)", layout="wide")
-st.title("\U0001f5bc️ Export Interactive Contact Sheet (Top Images Grid)")
+st.title("🖼️ Contact Sheet Selects")
 
 # Upload CSV
 df_file = st.file_uploader("Upload your processed CSV", type=["csv"])
@@ -20,7 +20,6 @@ df = pd.read_csv(df_file)
 if "Media Number" in df.columns:
     df = df[df["Media Number"].notna()]
 
-# Rename columns
 df = df.rename(columns={
     "Media Link": "URL",
     "Your Share": "Total Earnings",
@@ -53,7 +52,6 @@ if "loaded_images" not in st.session_state:
 if "image_state" not in st.session_state:
     st.session_state.image_state = {}
 
-# Helper to fetch and convert image to PIL
 headers = {"User-Agent": "Mozilla/5.0"}
 
 def fetch_image(url):
@@ -65,7 +63,6 @@ def fetch_image(url):
     except:
         return None
 
-# Load next batch of images
 def load_next_batch(count):
     new_images = []
     seen_ids = {mid for mid, _, _ in st.session_state.loaded_images}
@@ -96,38 +93,44 @@ def load_next_batch(count):
 if st.session_state.loaded_index == 0:
     load_next_batch(PRELOAD_LIMIT)
 
-# Reset grid
-if st.button("✅ Confirm Selects"):
-    st.session_state.loaded_images = [item for item in st.session_state.loaded_images if st.session_state.image_state[item[0]] != "rejected"]
-    st.session_state.image_state = {media_id: "active" for media_id, _, _ in st.session_state.loaded_images}
-
 # Display grid
-st.subheader("Reject images to curate your contact sheet")
+st.subheader("🧩 Select your top images")
 cols = st.columns(4)
 visible_images = 0
 for idx, (media_id, row, img) in enumerate(st.session_state.loaded_images):
     if st.session_state.image_state.get(media_id) == "rejected":
         continue
     with cols[visible_images % 4]:
-        st.image(img, use_container_width=True)
-        if st.button("❌", key=f"reject_{media_id}"):
-            st.session_state.image_state[media_id] = "rejected"
+        container = st.container()
+        with container:
+            col_img, col_btn = st.columns([4, 1])
+            with col_img:
+                st.image(img, use_container_width=True)
+            with col_btn:
+                if st.button("❌", key=f"reject_{media_id}"):
+                    st.session_state.image_state[media_id] = "rejected"
     visible_images += 1
 
-# Remaining active
 remaining = [row for media_id, row, _ in st.session_state.loaded_images if st.session_state.image_state.get(media_id) != "rejected"]
 
 # Suggest More Images
 if len(remaining) < 12 and st.session_state.loaded_index < len(unique_df):
+    st.markdown("---")
+    st.markdown("⬇️ You can suggest more images if you're not at 12 yet:")
     if st.button("➕ Suggest More Images"):
         load_next_batch(LOAD_MORE_COUNT)
 
-# Warning
+# Over-selected warning
 if len(remaining) > 12:
-    st.warning(f"You have selected {len(remaining)} images. Please reject {len(remaining) - 12} more to continue.")
+    st.warning(f"You've selected {len(remaining)} images. Please reject {len(remaining) - 12} more to continue.")
 
-# Final Preview
-if len(remaining) <= 12 and len(remaining) > 0:
+# Confirm Selection
+if st.button("✅ Confirm Selects"):
+    st.session_state.loaded_images = [item for item in st.session_state.loaded_images if st.session_state.image_state[item[0]] != "rejected"]
+    st.session_state.image_state = {media_id: "active" for media_id, _, _ in st.session_state.loaded_images}
+
+# Final Contact Sheet (Preview + Download)
+if 0 < len(remaining) <= 12:
     st.subheader("🖼️ Selects")
     top_images = pd.DataFrame(remaining).head(12)
     canvas_width, canvas_height = 1280, 960
@@ -149,7 +152,7 @@ if len(remaining) <= 12 and len(remaining) > 0:
         y = padding + (i // cols) * (thumb_h + padding)
         canvas.paste(img, (x, y), mask=img if img.mode == "RGBA" else None)
 
-    st.image(canvas, caption="🖼️ Selects", use_container_width=True)
+    st.image(canvas, use_container_width=True)
     buf = BytesIO()
     canvas.save(buf, format="PNG")
-    st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="custom_contact_sheet.png", mime="image/png")
+    st.download_button("⬇️ Download Contact Sheet", data=buf.getvalue(), file_name="contact_sheet.png", mime="image/png")
